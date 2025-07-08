@@ -126,6 +126,32 @@ def _pd_to_jf(df: pd.DataFrame):
     return jl.DataFrame(cols)
 
 # ---------------------------------------------------------------------------
+# HeteroPCA Model Wrapper
+# ---------------------------------------------------------------------------
+class HeteroPCAModel:
+    """Python wrapper for Julia HeteroPCAModel results"""
+    
+    def __init__(self, jl_pc_model):
+        """Initialize from Julia HeteroPCAModel object"""
+        self._jl_model = jl_pc_model
+        
+        # Extract essential fields
+        self.mean = np.asarray(jl_pc_model.mean)
+        self.proj = np.asarray(jl_pc_model.proj)  # d×k projection matrix
+        self.prinvars = np.asarray(jl_pc_model.prinvars)  # k principal variances
+        self.noisevars = np.asarray(jl_pc_model.noisevars)  # d noise variances
+        self.converged = bool(jl_pc_model.converged)
+        self.iterations = int(jl_pc_model.iterations)
+        
+        # Derived quantities
+        self.tprinvar = float(jl_pc_model.tprinvar)  # sum of principal variances
+        self.tvar = float(jl_pc_model.tvar)  # total variance
+        
+    def r2(self):
+        """Proportion of variance explained"""
+        return self.tprinvar / self.tvar if self.tvar > 0 else 0.0
+
+# ---------------------------------------------------------------------------
 # Model Wrapper
 # ---------------------------------------------------------------------------
 class GIVModel:
@@ -200,6 +226,8 @@ class GIVModel:
                           if jl_model.pc_factors is not jl.nothing else None)
         self.pc_loadings = (np.asarray(jl_model.pc_loadings)
                            if jl_model.pc_loadings is not jl.nothing else None)
+        self.pc_model = (HeteroPCAModel(jl_model.pc_model)
+                        if jl_model.pc_model is not jl.nothing else None)
 
         self.coef = np.concatenate([self.endog_coef, self.exog_coef])
         self.coefnames = self.endog_coefnames + self.exog_coefnames
@@ -363,9 +391,9 @@ def giv(
                 # Create algorithm with or without options
                 if value == "DeflatedHeteroPCA":
                     # Pass algorithm_options as keyword arguments (empty dict if none provided)
-                    jl_pca_opts[jl.Symbol("algorithm")] = jl.HeteroPCA.DeflatedHeteroPCA(**algorithm_options)
+                    jl_pca_opts[jl.Symbol("algorithm")] = jl.OptimalGIV.HeteroPCA.DeflatedHeteroPCA(**algorithm_options)
                 else:
-                    jl_pca_opts[jl.Symbol("algorithm")] = jl.seval(f"HeteroPCA.{value}()")
+                    jl_pca_opts[jl.Symbol("algorithm")] = jl.seval(f"OptimalGIV.HeteroPCA.{value}()")
             elif key == "impute_method":
                 jl_pca_opts[jl.Symbol(key)] = jl.Symbol(value) if isinstance(value, str) else value
             else:
