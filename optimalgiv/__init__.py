@@ -34,7 +34,7 @@ if not hasattr(sys, "_julia_env_initialized"):
             import Pkg
             Pkg.add(Pkg.PackageSpec(
                 url = "https://github.com/FuZhiyu/OptimalGIV.jl",
-                rev = "gkgiv"               # branch, tag, or commit SHA
+                rev = "main"               # branch, tag, or commit SHA
             ))
             '''
         )

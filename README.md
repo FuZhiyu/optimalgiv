@@ -214,6 +214,11 @@ $\sum_i S_{i,t} q_{i,t} = 0$ holds exactly within the sample.
 * `return_vcov`: Whether to compute and return the variance–covariance matrices. (default: `True`)
 * `tol`: Convergence tolerance for the solver (: `1e-6`)
 * `iterations`: Maximum number of solver iterations (: `100`)
+* `pca_option`: Dictionary of options for PC extraction when using `pc(k)` in formula:
+  * `'algorithm'`: HeteroPCA algorithm - `DeflatedHeteroPCA()`, `'StandardHeteroPCA'`, or `'DiagonalDeletion'`
+  * `'impute_method'`: `'zero'` or `'pairwise'` for handling missing values (default: `'zero'`)
+  * `'demean'`: Whether to demean data before PCA (default: `False`)
+  * `'maxiter'`: Maximum iterations for PCA algorithm (default: `100`)
 
 #### Advanced keyword arguments (Optional; Use with caution)
 
@@ -356,6 +361,68 @@ model6 = giv(
 ```
 ---
 
+### Principal Components (PC) in Formulas
+
+The package supports extracting principal components from residuals to capture unobserved factors:
+
+```python
+# Add pc(k) to the formula to extract k principal components
+model = giv(
+    df,
+    "q + id & endog(p) ~ X + pc(2)",  # Extract 2 PCs from residuals
+    id="id", t="t", weight="S",
+    save_df=True  # Needed to access PC factors/loadings in df
+)
+
+# Access PC results
+model.n_pcs          # Number of PCs extracted
+model.pc_factors     # k×T matrix of time factors
+model.pc_loadings    # N×k matrix of entity loadings
+model.pc_model       # HeteroPCAModel object with details
+```
+
+#### PCA Options
+
+You can customize the PC extraction algorithm using the `pca_option` parameter:
+
+```python
+from optimalgiv import DeflatedHeteroPCA
+
+# Example with custom PCA options
+model = giv(
+    df,
+    "q + id & endog(p) ~ X + pc(3)",
+    id="id", t="t", weight="S",
+    pca_option={
+        'algorithm': DeflatedHeteroPCA(t_block=20, condition_number_threshold=5.0),
+        'impute_method': 'zero',  # or 'pairwise'
+        'demean': False,
+        'maxiter': 200
+    }
+)
+
+# Alternative: use string specification
+model = giv(
+    df,
+    "q + id & endog(p) ~ X + pc(2)",
+    id="id", t="t", weight="S",
+    pca_option={
+        'algorithm': 'StandardHeteroPCA',  # or 'DiagonalDeletion'
+        'impute_method': 'pairwise',
+        'demean': True
+    }
+)
+```
+
+Available algorithms:
+- `DeflatedHeteroPCA(t_block=10, condition_number_threshold=4.0)`: Deflated algorithm with adaptive block sizing
+- `'StandardHeteroPCA'`: Standard iterative algorithm
+- `'DiagonalDeletion'`: Single-step diagonal deletion method
+
+When `save_df=True`, PC factors and loadings are added to the saved dataframe with columns like `pc_factor_1`, `pc_factor_2`, `pc_loading_1`, etc.
+
+---
+
 ### Working with Results
 
 ```python
@@ -391,6 +458,10 @@ model.coefdf               # ▶ pandas.DataFrame of entity-specific coefficient
 model.fe                   # ▶ pandas.DataFrame of fixed-effects (if saved)
 model.residual_df          # ▶ pandas.DataFrame of residuals (if saved)
 model.df                   # ▶ pandas.DataFrame of full estimation output (if save_df=True)
+model.n_pcs                # ▶ int: number of principal components extracted
+model.pc_factors           # ▶ numpy array (k×T) of PC time factors (if pc(k) used)
+model.pc_loadings          # ▶ numpy array (N×k) of PC entity loadings (if pc(k) used)
+model.pc_model             # ▶ HeteroPCAModel object with PC details (if pc(k) used)
 model.coef                 # ▶ numpy array of [ζ; β]
 model.vcov                 # ▶ full (ζ+β) variance–covariance matrix
 model.stderror             # ▶ numpy array of standard errors

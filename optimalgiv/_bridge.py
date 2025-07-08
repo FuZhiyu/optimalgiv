@@ -194,6 +194,13 @@ class GIVModel:
         self.residual_df = (_jf_to_pd(jl_model.residual_df)
                             if jl_model.residual_df is not jl.Base.nothing else None)
 
+        # PC-related fields
+        self.n_pcs = int(jl_model.n_pcs)
+        self.pc_factors = (np.asarray(jl_model.pc_factors) 
+                          if jl_model.pc_factors is not jl.nothing else None)
+        self.pc_loadings = (np.asarray(jl_model.pc_loadings)
+                           if jl_model.pc_loadings is not jl.nothing else None)
+
         self.coef = np.concatenate([self.endog_coef, self.exog_coef])
         self.coefnames = self.endog_coefnames + self.exog_coefnames
 
@@ -280,6 +287,14 @@ def giv(
     jt       = jl.Symbol(t)
     jweight  = jl.Symbol(weight) if weight else jl.nothing
 
+    # Define the NamedTuple creation function once (used by solver_options and pca_option)
+    jl.seval("""
+        function create_namedtuple_from_dict(d::Dict{Symbol, Any})
+            return (; d...)
+        end
+    """)
+    _create_namedtuple = jl.create_namedtuple_from_dict
+
     # Handle keyword arguments
     if isinstance(kwargs.get("algorithm"), str):
         kwargs["algorithm"] = jl.Symbol(kwargs["algorithm"])
@@ -333,14 +348,30 @@ def giv(
 
             jl_opts[jkey] = jval
 
-        jl.seval("""
-            function create_namedtuple_from_dict(d::Dict{Symbol, Any})
-                return (; d...)
-            end
-        """)
-        _create_namedtuple = jl.create_namedtuple_from_dict
-
         kwargs["solver_options"] = _create_namedtuple(jl_opts)
+
+    # Handle pca_option parameter similarly
+    if "pca_option" in kwargs and kwargs["pca_option"] is not None:
+        pca_opt = kwargs.pop("pca_option").copy()
+        jl_pca_opts = jl.seval("Dict{Symbol, Any}()")
+        
+        # Handle algorithm_options separately
+        algorithm_options = pca_opt.pop("algorithm_options", {})
+        
+        for key, value in pca_opt.items():
+            if key == "algorithm" and isinstance(value, str):
+                # Create algorithm with or without options
+                if value == "DeflatedHeteroPCA":
+                    # Pass algorithm_options as keyword arguments (empty dict if none provided)
+                    jl_pca_opts[jl.Symbol("algorithm")] = jl.HeteroPCA.DeflatedHeteroPCA(**algorithm_options)
+                else:
+                    jl_pca_opts[jl.Symbol("algorithm")] = jl.seval(f"HeteroPCA.{value}()")
+            elif key == "impute_method":
+                jl_pca_opts[jl.Symbol(key)] = jl.Symbol(value) if isinstance(value, str) else value
+            else:
+                jl_pca_opts[jl.Symbol(key)] = value
+        
+        kwargs["pca_option"] = _create_namedtuple(jl_pca_opts)
 
     g = kwargs.get("guess", None)
     if isinstance(g, dict):
