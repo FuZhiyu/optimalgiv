@@ -28,7 +28,6 @@ jobs:
             os: windows-latest
     
     env:
-      JULIA_NUM_THREADS: 1  # Prevent segfaults as noted in README
       PYTHON_JULIACALL_HANDLE_SIGNALS: yes
     
     steps:
@@ -39,6 +38,27 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      
+      - name: Get Python version
+        id: python-version
+        run: |
+          python_version=$(python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+          echo "version=$python_version" >> $GITHUB_OUTPUT
+          echo "Python version: $python_version"
+        shell: bash
+      
+      - name: Set Julia threads based on Python version
+        # Python 3.13 has compatibility issues with juliacall when using multiple threads
+        # See: https://github.com/JuliaPy/PythonCall.jl/issues/581
+        run: |
+          if [[ "${{ steps.python-version.outputs.version }}" == "3.13" ]]; then
+            echo "JULIA_NUM_THREADS=1" >> $GITHUB_ENV
+            echo "Using single Julia thread for Python 3.13 (juliacall compatibility issue)"
+          else
+            echo "JULIA_NUM_THREADS=4" >> $GITHUB_ENV
+            echo "Using 4 Julia threads for Python ${{ steps.python-version.outputs.version }}"
+          fi
+        shell: bash
       
       - name: Set up Julia ${{ matrix.julia-version }}
         uses: julia-actions/setup-julia@v2
@@ -85,7 +105,6 @@ jobs:
           uv run python -m pytest tests/ -v --cov=optimalgiv --cov-report=xml --cov-report=term -k "not test_against_julia_results"
         env:
           PYTHON_JULIACALL_AUTOLOAD_IPYTHON_EXTENSION: "no"
-          JULIA_NUM_THREADS: 1
       
       - name: Run Julia-Python integration tests
         shell: bash
@@ -95,7 +114,6 @@ jobs:
           uv run python -m pytest tests/test_against_julia_results.py -v
         env:
           PYTHON_JULIACALL_AUTOLOAD_IPYTHON_EXTENSION: "no"
-          JULIA_NUM_THREADS: 1
       
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3' && matrix.julia-version == '1'
@@ -125,8 +143,9 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     
     env:
-      JULIA_NUM_THREADS: 1
+      JULIA_NUM_THREADS: 4  # Use multithreading for Python 3.11
       OPTIMALGIV_FORCE_SETUP: 1  # Force full Julia setup
+      PYTHON_JULIACALL_HANDLE_SIGNALS: yes
     
     steps:
       - name: Checkout code
