@@ -83,6 +83,7 @@ jobs:
         uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
+          cache-dependency-glob: 'pyproject.toml'
       
       - name: Install Python package and test dependencies
         run: |
@@ -160,6 +161,7 @@ jobs:
         uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
+          cache-dependency-glob: 'pyproject.toml'
       
       # Don't set up Julia - let the package install it
       - name: Install package from scratch
