@@ -9,7 +9,7 @@ description     = "Python ⇄ Julia bridge for the OptimalGIV package"
 authors         = [ { name="Marco Zhang" }, { name="Julie Z. Fu" } ]
 readme          = "README.md"
 requires-python = ">=3.9"
-license         = { file = "LICENSE" }
+license         = { text = "MIT" }
 
 dependencies = [
     "pandas >= 1.5",
@@ -27,6 +27,13 @@ test = [
 
 [project.urls]
 "Source" = "https://github.com/FuZhiyu/optimalgiv"
+
+[tool.setuptools]
+packages = ["optimalgiv"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+optimalgiv = ["juliapkg.json"]
 
 [dependency-groups]
 dev = [
